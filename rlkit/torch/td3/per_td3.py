@@ -11,14 +11,20 @@ from rlkit.torch.torch_rl_algorithm import TorchRLAlgorithm, np_to_pytorch_batch
 
 from rlkit.torch.td3.td3 import TD3
 from rlkit.data_management.baselines_per_buffer import BaselinesPERBuffer
+from baselines.common.schedules import LinearSchedule
 
 class PERTD3(TD3):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.replay_buffer = BaselinesPERBuffer(self.replay_buffer_size, alpha=0.6)
+        self.t = 0
+        total_train_steps = 100 * 10000
+        self.beta_schedule = LinearSchedule(total_train_steps, initial_p=0.4, final_p=1.0)
 
     def get_batch(self):
-        batch = self.replay_buffer.random_batch(self.batch_size, beta=0.4)
+        batch = self.replay_buffer.random_batch(
+                self.batch_size, beta=self.beta_schedule.value(self.t)
+                )
         obs, act, rew, next_obs, done, weights, idxes = batch
         batch = {
             'rewards': rew,
@@ -31,6 +37,7 @@ class PERTD3(TD3):
 
     def _do_training(self):
         batch, weights, idxes = self.get_batch()
+        self.t += 1
         rewards = batch['rewards']
         terminals = batch['terminals']
         obs = batch['observations']
